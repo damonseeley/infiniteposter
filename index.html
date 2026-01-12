@@ -92,9 +92,38 @@
         #style-indicator.visible {
             opacity: 1;
         }
+
+        #debug-log {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 9999;
+        }
+
+        .debug-error {
+            color: #ff4444;
+        }
+
+        .debug-success {
+            color: #44ff44;
+        }
+
+        .debug-info {
+            color: #ffffff;
+        }
     </style>
 </head>
 <body>
+    <div id="debug-log"></div>
     <div id="canvas-container">
         <div id="controls">
             <button class="control-btn" onclick="app.togglePause()">⏸ Pause</button>
@@ -111,6 +140,55 @@
     </div>
 
     <script>
+        // Debug logging system
+        const debugLog = {
+            element: null,
+            messages: [],
+
+            init() {
+                this.element = document.getElementById('debug-log');
+                this.log('Debug system initialized', 'success');
+            },
+
+            log(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = `[${timestamp}] ${message}`;
+                this.messages.push(logEntry);
+
+                if (this.element) {
+                    const div = document.createElement('div');
+                    div.className = `debug-${type}`;
+                    div.textContent = logEntry;
+                    this.element.appendChild(div);
+                    this.element.scrollTop = this.element.scrollHeight;
+                }
+
+                console.log(logEntry);
+            },
+
+            error(message, err) {
+                this.log(`ERROR: ${message}`, 'error');
+                if (err) {
+                    this.log(`  ${err.message}`, 'error');
+                    this.log(`  ${err.stack}`, 'error');
+                }
+            }
+        };
+
+        // Capture all errors
+        window.addEventListener('error', (e) => {
+            debugLog.error('Uncaught error', e.error);
+        });
+
+        window.addEventListener('unhandledrejection', (e) => {
+            debugLog.error('Unhandled promise rejection', e.reason);
+        });
+
+        // Initialize debug on load
+        document.addEventListener('DOMContentLoaded', () => {
+            debugLog.init();
+        });
+
         // Global application state
         const app = {
             paused: false,
@@ -542,19 +620,27 @@
             }
 
             loadStyle(styleId) {
-                app.currentStyle = styleLibrary[styleId];
-                this.composition = new CompositionEngine(this.grid, app.currentStyle);
+                try {
+                    debugLog.log(`Loading style: ${styleId}`, 'info');
+                    app.currentStyle = styleLibrary[styleId];
+                    this.composition = new CompositionEngine(this.grid, app.currentStyle);
 
-                // Set background
-                const bgColor = random(app.currentStyle.palette.backgrounds);
-                background(bgColor);
+                    // Set background
+                    const bgColor = random(app.currentStyle.palette.backgrounds);
+                    background(bgColor);
+                    debugLog.log(`Background: ${bgColor}`, 'info');
 
-                // Update UI
-                document.getElementById('style-indicator').textContent = app.currentStyle.name;
-                document.getElementById('style-indicator').classList.add('visible');
-                setTimeout(() => {
-                    document.getElementById('style-indicator').classList.remove('visible');
-                }, 3000);
+                    // Update UI
+                    document.getElementById('style-indicator').textContent = app.currentStyle.name;
+                    document.getElementById('style-indicator').classList.add('visible');
+                    setTimeout(() => {
+                        document.getElementById('style-indicator').classList.remove('visible');
+                    }, 3000);
+
+                    debugLog.log(`Style loaded: ${app.currentStyle.name}`, 'success');
+                } catch (err) {
+                    debugLog.error('loadStyle failed', err);
+                }
             }
 
             transitionToNextStyle() {
@@ -582,40 +668,48 @@
             }
 
             addNewForm() {
-                const style = app.currentStyle;
-                const size = random(style.forms.sizeRange[0], style.forms.sizeRange[1]);
+                try {
+                    const style = app.currentStyle;
+                    const size = random(style.forms.sizeRange[0], style.forms.sizeRange[1]);
 
-                // Try to find a valid position
-                let attempts = 0;
-                let position;
+                    // Try to find a valid position
+                    let attempts = 0;
+                    let position;
 
-                while (attempts < 20) {
-                    position = this.composition.getBalancedPosition();
-                    if (this.composition.canPlaceForm(position.x, position.y, size, 'test')) {
-                        break;
+                    while (attempts < 20) {
+                        position = this.composition.getBalancedPosition();
+                        if (this.composition.canPlaceForm(position.x, position.y, size, 'test')) {
+                            break;
+                        }
+                        attempts++;
                     }
-                    attempts++;
+
+                    if (attempts >= 20) {
+                        debugLog.log('Could not find valid position for form', 'info');
+                        return;
+                    }
+
+                    const formType = random(style.forms.types);
+                    const color = this.composition.selectColor();
+                    const media = random(style.media.types);
+
+                    const form = new Form({
+                        type: formType,
+                        x: position.x,
+                        y: position.y,
+                        size: size,
+                        color: color,
+                        media: media,
+                        rotation: random(TWO_PI),
+                        lifespan: style.animation.lifespan * 1000,
+                        drawSpeed: style.animation.drawSpeed
+                    });
+
+                    app.forms.push(form);
+                    debugLog.log(`Added ${formType} (${media}) - Total: ${app.forms.length}`, 'info');
+                } catch (err) {
+                    debugLog.error('addNewForm failed', err);
                 }
-
-                if (attempts >= 20) return; // Couldn't find valid position
-
-                const formType = random(style.forms.types);
-                const color = this.composition.selectColor();
-                const media = random(style.media.types);
-
-                const form = new Form({
-                    type: formType,
-                    x: position.x,
-                    y: position.y,
-                    size: size,
-                    color: color,
-                    media: media,
-                    rotation: random(TWO_PI),
-                    lifespan: style.animation.lifespan * 1000,
-                    drawSpeed: style.animation.drawSpeed
-                });
-
-                app.forms.push(form);
             }
 
             draw() {
@@ -634,37 +728,63 @@
         let canvasHeight = 1024;
 
         function setup() {
-            // Adjust canvas size based on window
-            const maxDim = Math.min(windowWidth, windowHeight) * 0.9;
-            canvasWidth = maxDim;
-            canvasHeight = maxDim;
+            try {
+                debugLog.log('Setup started', 'info');
+                debugLog.log(`Window size: ${windowWidth}x${windowHeight}`, 'info');
 
-            const canvas = createCanvas(canvasWidth, canvasHeight);
-            canvas.parent('canvas-container');
+                // Adjust canvas size based on window
+                const maxDim = Math.min(windowWidth, windowHeight) * 0.9;
+                canvasWidth = maxDim;
+                canvasHeight = maxDim;
+                debugLog.log(`Canvas size: ${canvasWidth}x${canvasHeight}`, 'info');
 
-            // Initialize p5.brush
-            brush.load();
+                const canvas = createCanvas(canvasWidth, canvasHeight);
+                canvas.parent('canvas-container');
+                debugLog.log('Canvas created', 'success');
 
-            // Initialize generator
-            generator = new Generator();
-            generator.initialize(canvasWidth, canvasHeight);
+                // Check if brush is available
+                if (typeof brush === 'undefined') {
+                    debugLog.error('p5.brush not loaded!');
+                    return;
+                }
 
-            lastTime = millis();
+                // Initialize p5.brush
+                debugLog.log('Loading p5.brush...', 'info');
+                brush.load();
+                debugLog.log('p5.brush loaded', 'success');
 
-            // Show controls briefly
-            document.getElementById('controls').classList.add('visible');
-            setTimeout(() => {
-                document.getElementById('controls').classList.remove('visible');
-            }, 3000);
+                // Initialize generator
+                debugLog.log('Initializing generator...', 'info');
+                generator = new Generator();
+                generator.initialize(canvasWidth, canvasHeight);
+                debugLog.log('Generator initialized', 'success');
+
+                lastTime = millis();
+
+                // Show controls briefly
+                document.getElementById('controls').classList.add('visible');
+                setTimeout(() => {
+                    document.getElementById('controls').classList.remove('visible');
+                }, 3000);
+
+                debugLog.log('Setup complete!', 'success');
+            } catch (err) {
+                debugLog.error('Setup failed', err);
+            }
         }
 
         function draw() {
-            const currentTime = millis();
-            const deltaTime = currentTime - lastTime;
-            lastTime = currentTime;
+            try {
+                const currentTime = millis();
+                const deltaTime = currentTime - lastTime;
+                lastTime = currentTime;
 
-            generator.update(deltaTime);
-            generator.draw();
+                generator.update(deltaTime);
+                generator.draw();
+            } catch (err) {
+                debugLog.error('Draw error', err);
+                noLoop();
+            }
         }
 
         function windowResized() {
