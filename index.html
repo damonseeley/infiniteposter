@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Poster Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <script src="https://unpkg.com/p5.brush@1.6.3/lib/p5.brush.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #1a1a1a;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        #canvas-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 25px;
+            border-radius: 50px;
+            display: flex;
+            gap: 15px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        #controls.visible {
+            opacity: 1;
+        }
+
+        #canvas-container:hover #controls {
+            opacity: 1;
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        #speed-control {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+
+        #style-indicator {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            backdrop-filter: blur(10px);
+        }
+
+        #style-indicator.visible {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <div id="controls">
+            <button class="control-btn" onclick="app.togglePause()">⏸ Pause</button>
+            <select id="speed-control" onchange="app.setSpeed(this.value)">
+                <option value="0.5">Slow</option>
+                <option value="1" selected>Normal</option>
+                <option value="2">Fast</option>
+                <option value="4">Very Fast</option>
+            </select>
+            <button class="control-btn" onclick="app.skipToNextStyle()">⏭ Next Style</button>
+            <button class="control-btn" onclick="app.exportImage()">💾 Export</button>
+        </div>
+        <div id="style-indicator"></div>
+    </div>
+
+    <script>
+        // Global application state
+        const app = {
+            paused: false,
+            speed: 1,
+            currentStyle: null,
+            forms: [],
+
+            togglePause() {
+                this.paused = !this.paused;
+                const btn = document.querySelector('.control-btn');
+                btn.textContent = this.paused ? '▶ Resume' : '⏸ Pause';
+            },
+
+            setSpeed(value) {
+                this.speed = parseFloat(value);
+            },
+
+            skipToNextStyle() {
+                generator.transitionToNextStyle();
+            },
+
+            exportImage() {
+                saveCanvas('infinite-poster-' + Date.now(), 'png');
+            }
+        };
+
+        // ============================================
+        // STYLE DSL - Define visual styles
+        // ============================================
+        const styleLibrary = {
+            "swiss-modernist": {
+                name: "Swiss Modernist (1950s)",
+                era: "1950s",
+                composition: {
+                    gridRigidity: 0.8,
+                    symmetry: 0.3,
+                    negativeSpace: 0.4
+                },
+                palette: {
+                    mode: "limited",
+                    colors: ["#FF6B35", "#004E89", "#F7B801", "#1D3557", "#E63946"],
+                    backgrounds: ["#F4F4F4", "#FEFAE0", "#E8E8E8"],
+                    backgroundTone: "light"
+                },
+                forms: {
+                    types: ["circle", "rectangle", "arc", "line", "triangle"],
+                    density: "medium",
+                    sizeRange: [60, 350],
+                    overlap: "intentional"
+                },
+                media: {
+                    types: ["marker", "spray", "watercolor"],
+                    textureDensity: 0.6
+                },
+                animation: {
+                    drawSpeed: 1.0,
+                    lifespan: 120,
+                    transitionStyle: "fade"
+                }
+            },
+
+            "jazz-cool": {
+                name: "Jazz Cool (1960s)",
+                era: "1960s",
+                composition: {
+                    gridRigidity: 0.5,
+                    symmetry: 0.2,
+                    negativeSpace: 0.5
+                },
+                palette: {
+                    mode: "bold",
+                    colors: ["#D62828", "#003049", "#F77F00", "#EAE2B7", "#FCBF49"],
+                    backgrounds: ["#2B2D42", "#8D99AE", "#EDF2F4"],
+                    backgroundTone: "mixed"
+                },
+                forms: {
+                    types: ["circle", "arc", "organic", "line"],
+                    density: "sparse",
+                    sizeRange: [80, 400],
+                    overlap: "layered"
+                },
+                media: {
+                    types: ["marker", "watercolor", "spray"],
+                    textureDensity: 0.7
+                },
+                animation: {
+                    drawSpeed: 0.8,
+                    lifespan: 100,
+                    transitionStyle: "fade"
+                }
+            }
+        };
+
+        // ============================================
+        // GRID SYSTEM - Swiss-style underlying structure
+        // ============================================
+        class GridSystem {
+            constructor(width, height, divisions = 12) {
+                this.width = width;
+                this.height = height;
+                this.divisions = divisions;
+                this.cellWidth = width / divisions;
+                this.cellHeight = height / divisions;
+                this.points = this.generateGridPoints();
+            }
+
+            generateGridPoints() {
+                const points = [];
+                for (let x = 0; x <= this.divisions; x++) {
+                    for (let y = 0; y <= this.divisions; y++) {
+                        points.push({
+                            x: x * this.cellWidth,
+                            y: y * this.cellHeight,
+                            gridX: x,
+                            gridY: y
+                        });
+                    }
+                }
+                return points;
+            }
+
+            snapToGrid(x, y, rigidity = 0.8) {
+                if (random() > rigidity) {
+                    return { x, y };
+                }
+                const gridX = Math.round(x / this.cellWidth) * this.cellWidth;
+                const gridY = Math.round(y / this.cellHeight) * this.cellHeight;
+                return { x: gridX, y: gridY };
+            }
+
+            getRandomPoint(rigidity = 0.8) {
+                if (random() > rigidity) {
+                    return {
+                        x: random(this.width),
+                        y: random(this.height)
+                    };
+                }
+                return random(this.points);
+            }
+
+            getCellBounds(cellX, cellY, spanX = 1, spanY = 1) {
+                return {
+                    x: cellX * this.cellWidth,
+                    y: cellY * this.cellHeight,
+                    width: spanX * this.cellWidth,
+                    height: spanY * this.cellHeight
+                };
+            }
+        }
+
+        // ============================================
+        // COMPOSITION ENGINE - The "Design Intelligence"
+        // ============================================
+        class CompositionEngine {
+            constructor(grid, style) {
+                this.grid = grid;
+                this.style = style;
+                this.occupancyMap = new Map();
+                this.colorUsage = new Map();
+            }
+
+            canPlaceForm(x, y, size, formType) {
+                // Check negative space requirements
+                const minDistance = size * 0.3;
+
+                for (const form of app.forms) {
+                    if (form.state === 'removing') continue;
+
+                    const dx = form.x - x;
+                    const dy = form.y - y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const minRequired = (form.size + size) / 2 + minDistance;
+
+                    if (distance < minRequired) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            getBalancedPosition() {
+                // Calculate visual weight distribution
+                let leftWeight = 0, rightWeight = 0;
+                let topWeight = 0, bottomWeight = 0;
+
+                for (const form of app.forms) {
+                    if (form.state === 'removing') continue;
+
+                    const weight = form.size * form.size;
+                    if (form.x < this.grid.width / 2) leftWeight += weight;
+                    else rightWeight += weight;
+                    if (form.y < this.grid.height / 2) topWeight += weight;
+                    else bottomWeight += weight;
+                }
+
+                // Prefer areas with less weight
+                const preferLeft = leftWeight < rightWeight;
+                const preferTop = topWeight < bottomWeight;
+
+                const x = preferLeft
+                    ? random(0, this.grid.width * 0.6)
+                    : random(this.grid.width * 0.4, this.grid.width);
+
+                const y = preferTop
+                    ? random(0, this.grid.height * 0.6)
+                    : random(this.grid.height * 0.4, this.grid.height);
+
+                return this.grid.snapToGrid(x, y, this.style.composition.gridRigidity);
+            }
+
+            selectColor() {
+                const colors = this.style.palette.colors;
+
+                // Track color usage for balance
+                let leastUsed = colors[0];
+                let minCount = Infinity;
+
+                for (const color of colors) {
+                    const count = this.colorUsage.get(color) || 0;
+                    if (count < minCount) {
+                        minCount = count;
+                        leastUsed = color;
+                    }
+                }
+
+                // 70% chance to use least used, 30% random for variation
+                const selectedColor = random() < 0.7 ? leastUsed : random(colors);
+                this.colorUsage.set(selectedColor, (this.colorUsage.get(selectedColor) || 0) + 1);
+
+                return selectedColor;
+            }
+
+            shouldAddNewForm() {
+                const activeCount = app.forms.filter(f => f.state !== 'removing').length;
+                const maxForms = this.style.forms.density === 'sparse' ? 8 :
+                               this.style.forms.density === 'medium' ? 12 : 15;
+
+                return activeCount < maxForms;
+            }
+        }
+
+        // ============================================
+        // FORM GENERATORS - Geometric primitives
+        // ============================================
+        class Form {
+            constructor(config) {
+                this.type = config.type;
+                this.x = config.x;
+                this.y = config.y;
+                this.size = config.size;
+                this.color = config.color;
+                this.media = config.media;
+                this.rotation = config.rotation || 0;
+
+                // Lifecycle
+                this.state = 'appearing';
+                this.progress = 0;
+                this.age = 0;
+                this.lifespan = config.lifespan;
+
+                // Animation
+                this.drawSpeed = config.drawSpeed;
+                this.points = this.generatePoints();
+                this.currentPoint = 0;
+            }
+
+            generatePoints() {
+                const points = [];
+                const segments = 60;
+
+                switch(this.type) {
+                    case 'circle':
+                        for (let i = 0; i <= segments; i++) {
+                            const angle = (i / segments) * TWO_PI;
+                            points.push({
+                                x: this.x + cos(angle) * this.size / 2,
+                                y: this.y + sin(angle) * this.size / 2
+                            });
+                        }
+                        break;
+
+                    case 'rectangle':
+                        const hw = this.size / 2;
+                        const hh = this.size / 2;
+                        const perimeter = [
+                            { x: this.x - hw, y: this.y - hh },
+                            { x: this.x + hw, y: this.y - hh },
+                            { x: this.x + hw, y: this.y + hh },
+                            { x: this.x - hw, y: this.y + hh },
+                            { x: this.x - hw, y: this.y - hh }
+                        ];
+                        for (let i = 0; i < perimeter.length - 1; i++) {
+                            const start = perimeter[i];
+                            const end = perimeter[i + 1];
+                            for (let t = 0; t <= 1; t += 0.05) {
+                                points.push({
+                                    x: lerp(start.x, end.x, t),
+                                    y: lerp(start.y, end.y, t)
+                                });
+                            }
+                        }
+                        break;
+
+                    case 'arc':
+                        const arcStart = random(TWO_PI);
+                        const arcEnd = arcStart + random(PI / 2, PI * 1.5);
+                        for (let angle = arcStart; angle <= arcEnd; angle += 0.1) {
+                            points.push({
+                                x: this.x + cos(angle) * this.size / 2,
+                                y: this.y + sin(angle) * this.size / 2
+                            });
+                        }
+                        break;
+
+                    case 'line':
+                        const lineAngle = this.rotation;
+                        const lineLength = this.size;
+                        for (let i = 0; i <= segments; i++) {
+                            const t = i / segments;
+                            points.push({
+                                x: this.x + cos(lineAngle) * lineLength * (t - 0.5),
+                                y: this.y + sin(lineAngle) * lineLength * (t - 0.5)
+                            });
+                        }
+                        break;
+
+                    case 'triangle':
+                        const triPoints = [
+                            { x: this.x, y: this.y - this.size / 2 },
+                            { x: this.x + this.size / 2, y: this.y + this.size / 2 },
+                            { x: this.x - this.size / 2, y: this.y + this.size / 2 },
+                            { x: this.x, y: this.y - this.size / 2 }
+                        ];
+                        for (let i = 0; i < triPoints.length - 1; i++) {
+                            const start = triPoints[i];
+                            const end = triPoints[i + 1];
+                            for (let t = 0; t <= 1; t += 0.05) {
+                                points.push({
+                                    x: lerp(start.x, end.x, t),
+                                    y: lerp(start.y, end.y, t)
+                                });
+                            }
+                        }
+                        break;
+                }
+
+                return points;
+            }
+
+            update(deltaTime) {
+                if (app.paused) return;
+
+                this.age += deltaTime * app.speed;
+
+                switch(this.state) {
+                    case 'appearing':
+                        this.currentPoint += this.drawSpeed * app.speed * 2;
+                        if (this.currentPoint >= this.points.length) {
+                            this.currentPoint = this.points.length;
+                            this.state = 'persisting';
+                        }
+                        break;
+
+                    case 'persisting':
+                        if (this.age >= this.lifespan) {
+                            this.state = 'removing';
+                            this.progress = 0;
+                        }
+                        break;
+
+                    case 'removing':
+                        this.progress += deltaTime * app.speed * 0.02;
+                        if (this.progress >= 1) {
+                            return true; // Signal for removal
+                        }
+                        break;
+                }
+
+                return false;
+            }
+
+            draw() {
+                push();
+
+                // Apply fade for removing state
+                if (this.state === 'removing') {
+                    const alpha = 1 - this.progress;
+                    drawingContext.globalAlpha = alpha;
+                }
+
+                // Set brush properties
+                brush.set(this.media, this.color, 1);
+                brush.strokeWeight(random(2, 6));
+                brush.noFill();
+
+                // Draw stroke-by-stroke
+                const pointsToDraw = this.state === 'appearing'
+                    ? Math.floor(this.currentPoint)
+                    : this.points.length;
+
+                if (pointsToDraw > 1) {
+                    brush.beginShape();
+                    for (let i = 0; i < pointsToDraw; i++) {
+                        brush.vertex(this.points[i].x, this.points[i].y);
+                    }
+                    brush.endShape();
+                }
+
+                pop();
+            }
+        }
+
+        // ============================================
+        // GENERATOR - Main generation system
+        // ============================================
+        class Generator {
+            constructor() {
+                this.grid = null;
+                this.composition = null;
+                this.styleQueue = Object.keys(styleLibrary);
+                this.currentStyleIndex = 0;
+                this.nextFormTime = 0;
+            }
+
+            initialize(width, height) {
+                this.grid = new GridSystem(width, height, 12);
+                this.loadStyle(this.styleQueue[0]);
+            }
+
+            loadStyle(styleId) {
+                app.currentStyle = styleLibrary[styleId];
+                this.composition = new CompositionEngine(this.grid, app.currentStyle);
+
+                // Set background
+                const bgColor = random(app.currentStyle.palette.backgrounds);
+                background(bgColor);
+
+                // Update UI
+                document.getElementById('style-indicator').textContent = app.currentStyle.name;
+                document.getElementById('style-indicator').classList.add('visible');
+                setTimeout(() => {
+                    document.getElementById('style-indicator').classList.remove('visible');
+                }, 3000);
+            }
+
+            transitionToNextStyle() {
+                this.currentStyleIndex = (this.currentStyleIndex + 1) % this.styleQueue.length;
+                this.loadStyle(this.styleQueue[this.currentStyleIndex]);
+            }
+
+            update(deltaTime) {
+                if (app.paused) return;
+
+                // Update existing forms
+                for (let i = app.forms.length - 1; i >= 0; i--) {
+                    const shouldRemove = app.forms[i].update(deltaTime);
+                    if (shouldRemove) {
+                        app.forms.splice(i, 1);
+                    }
+                }
+
+                // Add new forms
+                this.nextFormTime -= deltaTime;
+                if (this.nextFormTime <= 0 && this.composition.shouldAddNewForm()) {
+                    this.addNewForm();
+                    this.nextFormTime = random(2000, 5000) / app.speed;
+                }
+            }
+
+            addNewForm() {
+                const style = app.currentStyle;
+                const size = random(style.forms.sizeRange[0], style.forms.sizeRange[1]);
+
+                // Try to find a valid position
+                let attempts = 0;
+                let position;
+
+                while (attempts < 20) {
+                    position = this.composition.getBalancedPosition();
+                    if (this.composition.canPlaceForm(position.x, position.y, size, 'test')) {
+                        break;
+                    }
+                    attempts++;
+                }
+
+                if (attempts >= 20) return; // Couldn't find valid position
+
+                const formType = random(style.forms.types);
+                const color = this.composition.selectColor();
+                const media = random(style.media.types);
+
+                const form = new Form({
+                    type: formType,
+                    x: position.x,
+                    y: position.y,
+                    size: size,
+                    color: color,
+                    media: media,
+                    rotation: random(TWO_PI),
+                    lifespan: style.animation.lifespan * 1000,
+                    drawSpeed: style.animation.drawSpeed
+                });
+
+                app.forms.push(form);
+            }
+
+            draw() {
+                for (const form of app.forms) {
+                    form.draw();
+                }
+            }
+        }
+
+        // ============================================
+        // P5.JS SKETCH
+        // ============================================
+        let generator;
+        let lastTime;
+        let canvasWidth = 1024;
+        let canvasHeight = 1024;
+
+        function setup() {
+            // Adjust canvas size based on window
+            const maxDim = Math.min(windowWidth, windowHeight) * 0.9;
+            canvasWidth = maxDim;
+            canvasHeight = maxDim;
+
+            const canvas = createCanvas(canvasWidth, canvasHeight);
+            canvas.parent('canvas-container');
+
+            // Initialize p5.brush
+            brush.load();
+
+            // Initialize generator
+            generator = new Generator();
+            generator.initialize(canvasWidth, canvasHeight);
+
+            lastTime = millis();
+
+            // Show controls briefly
+            document.getElementById('controls').classList.add('visible');
+            setTimeout(() => {
+                document.getElementById('controls').classList.remove('visible');
+            }, 3000);
+        }
+
+        function draw() {
+            const currentTime = millis();
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+
+            generator.update(deltaTime);
+            generator.draw();
+        }
+
+        function windowResized() {
+            // Maintain square aspect ratio
+            const maxDim = Math.min(windowWidth, windowHeight) * 0.9;
+            resizeCanvas(maxDim, maxDim);
+
+            // Reinitialize grid
+            generator.grid = new GridSystem(maxDim, maxDim, 12);
+        }
+    </script>
+</body>
+</html>
