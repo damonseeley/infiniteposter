@@ -810,9 +810,10 @@
                 canvasHeight = maxDim;
                 debugLog.log(`Canvas size: ${canvasWidth}x${canvasHeight}`, 'info');
 
-                const canvas = createCanvas(canvasWidth, canvasHeight);
+                // p5.brush requires WebGL mode
+                const canvas = createCanvas(canvasWidth, canvasHeight, WEBGL);
                 canvas.parent('canvas-container');
-                debugLog.log('Canvas created', 'success');
+                debugLog.log('Canvas created (WebGL mode)', 'success');
 
                 // Check if brush is available
                 if (typeof brush === 'undefined') {
@@ -852,8 +853,14 @@
                 const deltaTime = currentTime - lastTime;
                 lastTime = currentTime;
 
+                // WebGL mode: translate origin to top-left (like 2D mode)
+                push();
+                translate(-width/2, -height/2);
+
                 generator.update(deltaTime);
                 generator.draw();
+
+                pop();
             } catch (err) {
                 debugLog.error('Draw error', err);
                 noLoop();
@@ -866,7 +873,9 @@
             resizeCanvas(maxDim, maxDim);
 
             // Reinitialize grid
-            generator.grid = new GridSystem(maxDim, maxDim, 12);
+            if (generator && generator.grid) {
+                generator.grid = new GridSystem(maxDim, maxDim, 12);
+            }
         }
     </script>
 </body>
