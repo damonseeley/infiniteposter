@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Infinite Poster Generator</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-    <script src="https://unpkg.com/p5.brush@1.6.3/lib/p5.brush.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/p5.brush@latest/dist/p5.brush.js"></script>
     <style>
         body {
             margin: 0;
@@ -255,6 +255,7 @@
             speed: 1,
             currentStyle: null,
             forms: [],
+            useFallbackMode: false,  // Track if we're using fallback rendering
 
             togglePause() {
                 this.paused = !this.paused;
@@ -640,22 +641,33 @@
                     drawingContext.globalAlpha = alpha;
                 }
 
-                // Set brush properties
-                brush.set(this.media, this.color, 1);
-                brush.strokeWeight(random(2, 6));
-                brush.noFill();
-
                 // Draw stroke-by-stroke
                 const pointsToDraw = this.state === 'appearing'
                     ? Math.floor(this.currentPoint)
                     : this.points.length;
 
                 if (pointsToDraw > 1) {
-                    brush.beginShape();
-                    for (let i = 0; i < pointsToDraw; i++) {
-                        brush.vertex(this.points[i].x, this.points[i].y);
+                    if (app.useFallbackMode) {
+                        // Fallback mode: use native p5.js
+                        stroke(this.color);
+                        strokeWeight(3);
+                        noFill();
+                        beginShape();
+                        for (let i = 0; i < pointsToDraw; i++) {
+                            vertex(this.points[i].x, this.points[i].y);
+                        }
+                        endShape();
+                    } else {
+                        // p5.brush mode
+                        brush.set(this.media, this.color, 1);
+                        brush.strokeWeight(random(2, 6));
+                        brush.noFill();
+                        brush.beginShape();
+                        for (let i = 0; i < pointsToDraw; i++) {
+                            brush.vertex(this.points[i].x, this.points[i].y);
+                        }
+                        brush.endShape();
                     }
-                    brush.endShape();
                 }
 
                 pop();
@@ -804,14 +816,15 @@
 
                 // Check if brush is available
                 if (typeof brush === 'undefined') {
-                    debugLog.error('p5.brush not loaded!');
-                    return;
+                    debugLog.log('p5.brush not loaded - using fallback mode', 'info');
+                    app.useFallbackMode = true;
+                } else {
+                    // Initialize p5.brush
+                    debugLog.log('Loading p5.brush...', 'info');
+                    brush.load();
+                    debugLog.log('p5.brush loaded', 'success');
+                    app.useFallbackMode = false;
                 }
-
-                // Initialize p5.brush
-                debugLog.log('Loading p5.brush...', 'info');
-                brush.load();
-                debugLog.log('p5.brush loaded', 'success');
 
                 // Initialize generator
                 debugLog.log('Initializing generator...', 'info');
