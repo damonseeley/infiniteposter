@@ -242,6 +242,14 @@
 
         window.addEventListener('unhandledrejection', (e) => {
             debugLog.error('Unhandled promise rejection', e.reason);
+
+            // If it's a brush error, switch to fallback mode
+            if (e.reason && e.reason.message && e.reason.message.includes('uModelMatrix')) {
+                debugLog.log('Switching to fallback mode due to p5.brush error', 'info');
+                app.useFallbackMode = true;
+                // Restart the draw loop if it stopped
+                loop();
+            }
         });
 
         // Initialize debug on load
@@ -815,33 +823,47 @@
                 canvas.parent('canvas-container');
                 debugLog.log('Canvas created (WebGL mode)', 'success');
 
-                // Check if brush is available
+                // Check if brush is available - delay loading to let WebGL initialize
                 if (typeof brush === 'undefined') {
                     debugLog.log('p5.brush not loaded - using fallback mode', 'info');
                     app.useFallbackMode = true;
+                    initializeApp();
                 } else {
-                    // Initialize p5.brush
-                    debugLog.log('Loading p5.brush...', 'info');
-                    brush.load();
-                    debugLog.log('p5.brush loaded', 'success');
-                    app.useFallbackMode = false;
+                    // Initialize p5.brush after a short delay
+                    debugLog.log('Waiting for WebGL to initialize...', 'info');
+                    setTimeout(() => {
+                        try {
+                            debugLog.log('Loading p5.brush...', 'info');
+                            brush.load();
+                            debugLog.log('p5.brush loaded', 'success');
+                            app.useFallbackMode = false;
+                        } catch (err) {
+                            debugLog.log('p5.brush failed - using fallback mode', 'info');
+                            debugLog.error('Brush load error', err);
+                            app.useFallbackMode = true;
+                        }
+                        initializeApp();
+                    }, 100);
                 }
 
-                // Initialize generator
-                debugLog.log('Initializing generator...', 'info');
-                generator = new Generator();
-                generator.initialize(canvasWidth, canvasHeight);
-                debugLog.log('Generator initialized', 'success');
+                function initializeApp() {
+                    // Initialize generator
+                    debugLog.log('Initializing generator...', 'info');
+                    generator = new Generator();
+                    generator.initialize(canvasWidth, canvasHeight);
+                    debugLog.log('Generator initialized', 'success');
 
-                lastTime = millis();
+                    lastTime = millis();
 
-                // Show controls briefly
-                document.getElementById('controls').classList.add('visible');
-                setTimeout(() => {
-                    document.getElementById('controls').classList.remove('visible');
-                }, 3000);
+                    // Show controls briefly
+                    document.getElementById('controls').classList.add('visible');
+                    setTimeout(() => {
+                        document.getElementById('controls').classList.remove('visible');
+                    }, 3000);
 
-                debugLog.log('Setup complete!', 'success');
+                    debugLog.log('Setup complete!', 'success');
+                }
+
             } catch (err) {
                 debugLog.error('Setup failed', err);
             }
@@ -849,6 +871,11 @@
 
         function draw() {
             try {
+                // Don't draw until generator is initialized
+                if (!generator) {
+                    return;
+                }
+
                 const currentTime = millis();
                 const deltaTime = currentTime - lastTime;
                 lastTime = currentTime;
