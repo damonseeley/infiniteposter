@@ -824,8 +824,15 @@
                 debugLog.log('Canvas created (WebGL mode)', 'success');
 
                 // Check if brush is available - delay loading to let WebGL initialize
-                if (typeof brush === 'undefined') {
-                    debugLog.log('p5.brush not loaded - using fallback mode', 'info');
+                // TEMPORARY: Force fallback mode on mobile/iPad due to p5.brush compatibility issues
+                const isMobile = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent);
+
+                if (typeof brush === 'undefined' || isMobile) {
+                    if (isMobile) {
+                        debugLog.log('Mobile device detected - using fallback mode', 'info');
+                    } else {
+                        debugLog.log('p5.brush not loaded - using fallback mode', 'info');
+                    }
                     app.useFallbackMode = true;
                     initializeApp();
                 } else {
